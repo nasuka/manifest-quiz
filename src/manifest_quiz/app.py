@@ -3,20 +3,35 @@ import random
 import pandas as pd
 import os
 from pathlib import Path
-
 # ページ設定
 st.set_page_config(
-    page_title="マニフェスト クイズ",
+    page_title="チームみらいマニフェスト クイズ（2025年5月30日時点版）",
     page_icon="🚀",
     layout="centered"
 )
+
+# 分野マッピング（ステップを統合）
+FIELD_MAPPING = {
+    "教育": ["ステップ１教育", "ステップ２教育", "ステップ３教育"],
+    "子育て": ["ステップ１子育て", "ステップ３子育て"],
+    "行政改革": ["ステップ１行政改革", "ステップ２行政改革"],
+    "産業": ["ステップ１産業", "ステップ３産業"],
+    "科学技術": ["ステップ１科学技術", "ステップ３科学技術"],
+    "医療": ["ステップ１医療", "ステップ２医療", "ステップ３医療"],
+    "経済財政": ["ステップ２経済財政", "ステップ３経済財政"],
+    "エネルギー": ["ステップ３エネルギー"],
+    "デジタル民主主義": ["ステップ１デジタル民主主義"],
+    "基本理念・政策": ["チームみらいのビジョン", "政策インデックス"],
+    "ステップ概要": ["ステップ１", "ステップ２", "ステップ３"],
+    "特別プラン・その他": ["100日プラン", "その他重要分野", "改善提案の反映方針"]
+}
 
 # クイズデータ
 @st.cache_data
 def load_quiz_data():
     """CSVファイルからクイズ問題データを読み込む"""
     try:
-        csv_path = "quiz_questions.csv"
+        csv_path = "quiz_all_combined.csv"
         
         # CSVファイルを読み込み
         df = pd.read_csv(csv_path)
@@ -64,18 +79,33 @@ def initialize_session_state():
         st.session_state.user_answers = []
     if 'quiz_completed' not in st.session_state:
         st.session_state.quiz_completed = False
+    if 'selected_mode' not in st.session_state:
+        st.session_state.selected_mode = None
+    if 'selected_field' not in st.session_state:
+        st.session_state.selected_field = None
 
-def generate_quiz_questions(quiz_data, num_questions=10):
-    """ランダムにクイズ問題を生成"""
+def generate_quiz_questions(quiz_data, num_questions=10, selected_field=None):
+    """クイズ問題を生成（全問題またはフィールド別）"""
     all_questions = []
-    for category, questions in quiz_data.items():
-        for q in questions:
-            q['category'] = category
-            all_questions.append(q)
+    
+    if selected_field and selected_field in FIELD_MAPPING:
+        # 特定分野の問題のみ
+        target_categories = FIELD_MAPPING[selected_field]
+        for category in target_categories:
+            if category in quiz_data:
+                for q in quiz_data[category]:
+                    q['category'] = category
+                    all_questions.append(q)
+    else:
+        # 全問題からランダム
+        for category, questions in quiz_data.items():
+            for q in questions:
+                q['category'] = category
+                all_questions.append(q)
     
     # 問題数が足りない場合は全問題を使用
     if len(all_questions) <= num_questions:
-        return all_questions
+        return random.shuffle(all_questions) or all_questions
     
     return random.sample(all_questions, num_questions)
 
@@ -125,16 +155,22 @@ def get_recommendation_message(category_percentages):
     
     for category, percentage in category_percentages.items():
         if percentage < 50:
-            if category == "教育政策":
+            if "教育" in category:
                 recommendations.append("📚 教育政策についてもっと詳しく学んでみましょう。AIを活用した個別最適化教育に注目です！")
-            elif category == "行政改革":
+            elif "行政改革" in category:
                 recommendations.append("🏛️ 行政改革について学習を深めませんか？デジタル化による効率的な行政サービスがポイントです。")
-            elif category == "子育て支援":
+            elif "子育て" in category:
                 recommendations.append("👶 子育て支援政策をもう一度チェックしてみましょう。デジタル母子パスポートなど革新的な取り組みがあります。")
-            elif category == "医療政策":
+            elif "医療" in category:
                 recommendations.append("🏥 医療政策について復習してみてください。オンライン診療など新しい医療のあり方に注目です。")
-            elif category == "ビジョン・基本方針":
+            elif "ビジョン" in category:
                 recommendations.append("🎯 チームみらいの基本的なビジョンをもう一度確認してみましょう。")
+            elif "産業" in category:
+                recommendations.append("🏭 産業政策について学んでみましょう。AIシフトやDX推進がキーワードです。")
+            elif "科学技術" in category:
+                recommendations.append("🔬 科学技術政策を復習してみてください。研究環境改善やディープテック投資に注目です。")
+            else:
+                recommendations.append(f"📖 {category}について復習してみることをお勧めします。")
     
     if not recommendations:
         recommendations.append("🎉 素晴らしい！全分野で高いスコアを獲得しました。チームみらいの政策をよく理解されています！")
@@ -152,17 +188,82 @@ def main():
     if not st.session_state.quiz_started:
         # スタート画面
         st.write("### クイズについて")
-        st.write("このクイズでは、マニフェストドキュメントに記載された内容に関する問題が出題されます。")
-        st.write("全10問の選択式問題に答えて、理解度をチェックしましょう！")
+        st.write("このクイズでは、チームみらいのマニフェストに記載された内容に関する問題が出題されます。")
+        st.write("問題数と出題範囲を選択して、理解度をチェックしましょう！")
         
-        # st.write("### 出題カテゴリ")
-        # for category in quiz_data.keys():
-        #     st.write(f"• {category}")
+        # 出題モード選択
+        st.write("### 📋 出題モード選択")
         
-        if st.button("クイズを始める", type="primary"):
-            st.session_state.quiz_started = True
-            st.session_state.quiz_questions = generate_quiz_questions(quiz_data, 10)
-            st.rerun()
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("**🎲 ランダム出題**")
+            st.write("全分野からランダムに出題")
+            if st.button("ランダム出題を選択", type="secondary"):
+                st.session_state.selected_mode = "random"
+        
+        with col2:
+            st.write("**📚 分野別出題**")
+            st.write("特定の分野に絞って出題")
+            if st.button("分野別出題を選択", type="secondary"):
+                st.session_state.selected_mode = "field"
+        
+        # 分野別出題の場合の分野選択
+        if st.session_state.selected_mode == "field":
+            st.write("### 🎯 出題分野を選択")
+            
+            # 分野リストを2列で表示
+            field_options = list(FIELD_MAPPING.keys())
+            cols = st.columns(2)
+            
+            for i, field in enumerate(field_options):
+                col = cols[i % 2]
+                with col:
+                    # 各分野の問題数を表示
+                    question_count = sum(len(quiz_data.get(cat, [])) for cat in FIELD_MAPPING[field])
+                    if st.button(f"{field} ({question_count}問)", use_container_width=True):
+                        st.session_state.selected_field = field
+                        st.rerun()
+            
+            if st.session_state.selected_field:
+                st.write(f"**選択された分野**: {st.session_state.selected_field}")
+                
+                # 問題数選択
+                question_count = sum(len(quiz_data.get(cat, [])) for cat in FIELD_MAPPING[st.session_state.selected_field])
+                max_questions = min(question_count, 20)
+                
+                num_questions = st.selectbox(
+                    "出題数を選択してください",
+                    options=[5, 10, 15, max_questions] if max_questions > 15 else [5, 10, max_questions],
+                    index=1 if max_questions > 10 else 0
+                )
+                
+                if st.button("この設定でクイズを始める", type="primary"):
+                    st.session_state.quiz_started = True
+                    st.session_state.quiz_questions = generate_quiz_questions(quiz_data, num_questions, st.session_state.selected_field)
+                    st.rerun()
+        
+        # ランダム出題の場合
+        elif st.session_state.selected_mode == "random":
+            st.write("### 🎲 ランダム出題設定")
+            
+            num_questions = st.selectbox(
+                "出題数を選択してください",
+                options=[10, 15, 20, 30],
+                index=0
+            )
+            
+            if st.button("ランダムクイズを始める", type="primary"):
+                st.session_state.quiz_started = True
+                st.session_state.quiz_questions = generate_quiz_questions(quiz_data, num_questions)
+                st.rerun()
+        
+        # 利用可能な分野一覧を表示
+        if st.session_state.selected_mode is None:
+            st.write("### 📖 利用可能な分野")
+            for field, categories in FIELD_MAPPING.items():
+                question_count = sum(len(quiz_data.get(cat, [])) for cat in categories)
+                st.write(f"• **{field}**: {question_count}問 ({', '.join(categories)})")
     
     elif not st.session_state.quiz_completed:
         # クイズ実行中
@@ -235,15 +336,15 @@ def main():
         
         # リセットボタン
         if st.button("もう一度挑戦する", type="secondary"):
-            for key in ['quiz_started', 'current_question', 'score', 'quiz_questions', 'user_answers', 'quiz_completed']:
+            for key in ['quiz_started', 'current_question', 'score', 'quiz_questions', 'user_answers', 'quiz_completed', 'selected_mode', 'selected_field']:
                 if key in st.session_state:
                     del st.session_state[key]
             st.rerun()
 
     # フッター
-    # st.markdown("---")
-    # st.write("🔗 [チームみらい公式サイト](https://team-mir.ai/)")
-    # st.write("📖 [マニフェスト詳細](https://policy.team-mir.ai/view/README.md)")
+    st.markdown("---")
+    st.write("🔗 [チームみらい公式サイト](https://team-mir.ai/)")
+    st.write("📖 [マニフェスト詳細](https://policy.team-mir.ai/view/README.md)")
 
 if __name__ == "__main__":
     main()
