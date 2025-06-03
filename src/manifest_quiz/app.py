@@ -83,6 +83,8 @@ def initialize_session_state():
         st.session_state.selected_mode = None
     if 'selected_field' not in st.session_state:
         st.session_state.selected_field = None
+    if 'answer_shown' not in st.session_state:
+        st.session_state.answer_shown = False
 
 def generate_quiz_questions(quiz_data, num_questions=10, selected_field=None):
     """クイズ問題を生成（全問題またはフィールド別）"""
@@ -121,8 +123,24 @@ def display_question(question_data, question_num, total_questions):
     user_answer = st.radio(
         "選択してください:",
         question_data['options'],
-        key=f"q_{question_num}"
+        key=f"q_{question_num}",
+        disabled=st.session_state.answer_shown
     )
+    
+    # 答えが表示されている場合は正解と解説を表示
+    if st.session_state.answer_shown:
+        correct_answer = question_data['options'][question_data['correct']]
+        is_correct = user_answer == correct_answer
+        
+        st.write("---")
+        
+        if is_correct:
+            st.success(f"✅ 正解！ **{correct_answer}**")
+        else:
+            st.error(f"❌ 不正解")
+            st.info(f"正解は: **{correct_answer}**")
+        
+        st.write(f"**解説**: {question_data['explanation']}")
     
     return user_answer
 
@@ -277,21 +295,30 @@ def main():
             col1, col2, col3 = st.columns([1, 2, 1])
             
             with col2:
-                if st.button("次の問題へ", type="primary", use_container_width=True):
-                    # 回答を保存
-                    st.session_state.user_answers.append(user_answer)
-                    
-                    # 正解チェック
-                    if user_answer == question_data['options'][question_data['correct']]:
-                        st.session_state.score += 1
-                    
-                    st.session_state.current_question += 1
-                    
-                    # 最後の問題の場合
-                    if st.session_state.current_question >= total_q:
-                        st.session_state.quiz_completed = True
-                    
-                    st.rerun()
+                if not st.session_state.answer_shown:
+                    # 回答確定ボタン
+                    if st.button("回答を確定", type="primary", use_container_width=True):
+                        st.session_state.answer_shown = True
+                        st.rerun()
+                else:
+                    # 次の問題へボタン
+                    next_button_text = "次の問題へ" if current_q < total_q - 1 else "結果を見る"
+                    if st.button(next_button_text, type="primary", use_container_width=True):
+                        # 回答を保存
+                        st.session_state.user_answers.append(user_answer)
+                        
+                        # 正解チェック
+                        if user_answer == question_data['options'][question_data['correct']]:
+                            st.session_state.score += 1
+                        
+                        st.session_state.current_question += 1
+                        st.session_state.answer_shown = False  # 次の問題用にリセット
+                        
+                        # 最後の問題の場合
+                        if st.session_state.current_question >= total_q:
+                            st.session_state.quiz_completed = True
+                        
+                        st.rerun()
         
     else:
         # 結果画面
@@ -336,7 +363,7 @@ def main():
         
         # リセットボタン
         if st.button("もう一度挑戦する", type="secondary"):
-            for key in ['quiz_started', 'current_question', 'score', 'quiz_questions', 'user_answers', 'quiz_completed', 'selected_mode', 'selected_field']:
+            for key in ['quiz_started', 'current_question', 'score', 'quiz_questions', 'user_answers', 'quiz_completed', 'selected_mode', 'selected_field', 'answer_shown']:
                 if key in st.session_state:
                     del st.session_state[key]
             st.rerun()
