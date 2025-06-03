@@ -267,7 +267,7 @@ def main():
             
             num_questions = st.selectbox(
                 "出題数を選択してください",
-                options=[10, 15, 20, 30],
+                options=[5, 10, 15, 20, 30],
                 index=0
             )
             
